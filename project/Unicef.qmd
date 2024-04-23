@@ -1,0 +1,411 @@
+---
+title: "UNICEF Assignment"
+subtitle: Clean Water Access Quarto Report - 2024
+author: Shane Mario Antao - DCU ID - 23264398
+date: last-modified
+date format: "MM-DD-YYYY"
+format: 
+   html:
+     embed-resources: true
+     theme: lumen
+     smooth-scroll: true
+     font-family: Roboto
+     toc: true
+     toc-title: Report Contents
+     toc-depth: 3
+     toc-location: right
+     code-fold: true
+     code-line-numbers: true
+     code-tools: true
+     code-link: true
+     code-highlight-style: monokai         
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Report Summary
+This report reveals the stark global disparities in access to safe drinking water and their profound connection to economic development 
+
+  + Data for this analysis was sourced from **UNICEF**
+
+  + Please find the Tableau Version of this Report - [Click Here](https://public.tableau.com/views/TableauAssignment_17109694871240/Dashboard1?:language=en-GB&:sid=&:display_count=n&:origin=viz_share_link) 
+
+  + The color palette of red and blue is used for better visual understanding, with shades of blue suggesting clean water access and shades of red suggesting usage of unimproved water sources ***(excludes a few)***
+
+### Key Highlights
+
+- **Global Progress:** Improved access to clean water sources observed from 2000 to 2022 signifies global progress in addressing water access challenges.
+- **Regional Disparities:** Persistent disparities exist, notably in Sub-Saharan Africa, where access to clean water remains a significant concern compared to other regions.
+- **Continued Challenges:** Sub-Saharan Africa faces ongoing challenges with unimproved water access, highlighting the need for targeted interventions in these areas.
+- **Two-Decade Analysis:** A comparative analysis reveals progress over two decades, yet 34 countries still struggle with high levels of unimproved water access, posing health risks.
+- **Economic Development Link:** Positive correlation observed between declining unimproved water access and economic development emphasizes the importance of addressing economic disparities.
+- **Population Growth:** Steep population growth over the past two decades underscores the urgency of ensuring equitable access to clean water sources to meet the needs of growing populations.
+
+
+### The Story of Clean Water Access and its Relationship with GDP Per Capita
+
+### Libraries
+The provided code snippet initializes data processing and visualization tasks. It sets up data for analysis and generates visual representations. Additionally, specific data preparation steps might be conducted within individual graph code chunks to achieve desired visual outcomes.
+```{r}
+#| label: essential-packages 
+#| include: true
+#| echo: true
+library("tidyverse")
+library("rworldmap")
+library("rnaturalearth")
+library("RColorBrewer")
+library("ggthemes")
+library(downlit)
+library(xml2)
+library(scales)
+library(patchwork)
+library(ggthemes)
+library(RColorBrewer)
+library(dplyr)
+library(magrittr)
+library(readr)
+library(ggplot2)
+library(sf)
+library(ggiraph)
+library(leaflet)
+library(plotly)
+color_palette <- brewer.pal(n = 9, name = "RdBu")
+color_palette <- rev(color_palette)
+unicef_indicator_1 <- read_csv("unicef_indicator_1.csv")
+unicef_metadata <- read_csv("unicef_metadata.csv")
+full_data <- unicef_metadata %>% 
+  filter(year >= 2000 & year <= 2022) %>%
+  left_join(unicef_indicator_1, by = c("country", "alpha_3_code", "year" = "time_period")) 
+world <- ne_countries(scale = "small", returnclass = "sf")
+countries_average_obs <- full_data %>% 
+  group_by(alpha_3_code, country) %>% 
+  summarise(average_obs_value = mean(obs_value))
+countries_obs_value<- world %>%
+   select(geometry, name, iso_a3) %>%
+     left_join(unicef_indicator_1, by = c("iso_a3" = "alpha_3_code")) %>%
+     filter(sex=="Total")
+world_average_data <- world %>%
+  select(geometry, name, iso_a3) %>%
+  left_join(countries_average_obs, by = c("iso_a3" = "alpha_3_code"))  
+```
+### World Statistics
+
+As per the below map, while average global clean water access has improved (2000-2022), stark disparities persist. Countries in **Sub-Saharan Africa** *disproportionately* rely on **unimproved drinking water sources**, highlighting a **critical need** for focused action.
+```{r}
+#| label: world map
+#| include: true
+#| result: 'asis'
+#| echo: true
+
+world_average_data %>%
+  st_transform(crs = "+proj=robin") %>% 
+  ggplot() +
+  geom_sf(color = "darkgrey", fill = "gray85") +  
+  geom_sf(aes(fill = average_obs_value)) +  
+  scale_fill_gradientn(colours = color_palette, 
+                       name = "% Unimproved Water") + 
+  theme_bw() +                                    
+  theme(plot.background = element_rect(fill = "gray85"),    
+        panel.background = element_rect(fill = "gray85"), 
+        legend.background = element_rect(fill = "gray85"),  
+        plot.title = element_text(face = "bold"),
+        axis.text.x = element_blank(), 
+        legend.position = "bottom") +
+  labs(title = "Global Clean Water Access (2000-2022)",
+       subtitle = "Average Unimproved Water Source Usage", 
+       x = NULL, y = NULL )
+```
+### Regional Disparity
+
+The line graph highlights a critical issue identified in the map: a lack of clean water sources in **Sub-Saharan African** countries. While there has been a gradual improvement in access to clean water over a **20-year period**, a significant disparity persists between **Sub-Saharan Africa** and other regions.
+
+*Hover or click for more details*
+```{r}
+#| label: line graph
+#| include: true
+#| result: 'asis'
+#| echo: true
+data_for_plot <- unicef_indicator_1 %>% 
+  group_by(country, time_period, region) %>%                 
+  summarize(avg_unimproved = mean(obs_value, na.rm = TRUE), time_period = time_period[1]) 
+
+n_regions <- length(unique(data_for_plot$region)) 
+color_palette <- brewer.pal(n = n_regions, name = "RdBu") 
+color_palette <- rev(color_palette)
+
+p <- ggplot(data_for_plot, aes(x = time_period, y = avg_unimproved, group = country, color = region)) +
+  geom_line() +  
+  theme_bw() +                                    
+  theme(plot.background = element_rect(fill = "gray85"),    
+        panel.background = element_rect(fill = "gray85"), 
+        legend.background = element_rect(fill = "gray85"),
+        legend.position = "bottom", 
+        legend.box = "horizontal") + 
+  labs(title = "Average Unimproved Water Access by Region",
+       x = "Time Period", y = "Average Unimproved Water Access (%)",
+       color = "Region")  +
+  scale_color_manual(values = color_palette) 
+
+ggplotly(p, tooltip = c("region", "time_period")) %>%
+  config(displayModeBar = FALSE) %>%
+  layout(hoverlabel = list(bgcolor = "gray85",  
+                           font = list(family = "Arial", size = 12)))
+```
+### Regional Comparative Analysis
+
+The following bubble graph demonstrates a comparative analysis of unimproved water access between the years *2000* and *2022*. It highlights a **persistent issue** in **Sub-Saharan Africa**, where unimproved water access remains high. In contrast, other regions have shown **considerable improvement**, with average unimproved water access rates decreasing to **under 5%**.
+
+*Hover for more details*
+```{r}
+#| label: bubble diagram
+#| include: true
+#| result: 'asis'
+#| echo: true
+data_for_plot <- unicef_indicator_1 %>%
+ filter(time_period %in% c(2000, 2022)) %>%  
+ group_by(region, time_period) %>%      
+ mutate(avg_unimproved_change = c(NA, diff(obs_value))) %>%  
+ summarize(avg_unimproved = mean(obs_value, na.rm = TRUE)) 
+n_regions <- length(unique(data_for_plot$region))  
+color_palette <- brewer.pal(n = n_regions, name = "RdBu") 
+color_palette <- rev(color_palette) 
+p <- ggplot(data_for_plot, aes(x = avg_unimproved, y = region, fill = region, size = abs(avg_unimproved))) +
+  geom_point(shape = 21, color = "black", stroke = 0.2) +  
+  facet_grid(. ~ time_period) +  
+  theme_bw() +                                    
+  theme(panel.background = element_rect(fill = "gray85"),    
+        plot.background = element_rect(fill = "gray85"),    
+        legend.position = "bottom",
+        legend.background = element_rect(fill = "gray85"),
+        plot.title = element_text(hjust = 0.5)) + 
+  labs(title = "Regional Unimproved Water Access: 2000 vs. 2022",
+       x = "Average Unimproved Water Access (%)", y = "Region",
+       fill = "Region",  
+       size = "") + 
+  scale_fill_manual(values = color_palette)
+
+ggplotly(p, tooltip = c("avg_unimproved")) %>%  
+  config(displayModeBar = FALSE)
+```
+
+### Where Are Unimproved Water Access Challenges Most Prevalent?
+
+This histogram offers a compelling visualization of regional access to clean drinking water compared to unimproved water sources across the years 2000-2022. A **stark disparity** is evident between regions. While **Europe and Central Asia, North America, Middle East and North Africa, Latin America and the Caribbean, and East Asia and the Pacific** boast **multiple countries** with access to clean water, **Sub-Saharan Africa** continues to grapple with **widespread reliance** on unimproved water sources. The specific range of unimproved water access in Sub-Saharan Africa can be determined by examining the histogram itself.
+
+*Additionally, interactive hovering over the bars and selecting individual regions in the legend highlight the selected region and its data, providing a focused breakdown of the observed trends*
+```{r}
+#| label: histogram
+#| include: true
+#| result: 'asis'
+#| echo: true
+data_for_histogram <- unicef_indicator_1 %>%
+  filter(time_period %in% c(2000, 2022)) %>%
+  group_by(region, obs_value) %>%  
+  summarize(country_count = n()) %>%
+  mutate(region = as.factor(region)) 
+n_regions <- length(unique(data_for_histogram$region)) 
+color_palette <- brewer.pal(n = n_regions, name = "RdBu") 
+color_palette <- rev(color_palette)
+p <- ggplot(data_for_histogram, aes(x = obs_value, fill = region)) + 
+  geom_histogram(color = "black", binwidth = 2) + 
+  labs(title = "Distribution of Unimproved Water Access",
+       x = "Average Unimproved Water Access (%)",
+       y = "Count of Countries",
+       fill = "Region") +
+  theme_bw() +   
+  theme(panel.background = element_rect(fill = "gray85"),    
+        plot.background = element_rect(fill = "gray85"), 
+        legend.position = "bottom",
+        legend.background = element_rect(fill = "gray85"), 
+        legend.margin = margin(t = 0, r = 20, b = 0, l = 0), 
+        plot.caption = element_text(hjust = 1, vjust = -1)) + 
+  labs(caption = "Source: Unicef") + 
+  scale_x_continuous(breaks = seq(0, 100, by = 5)) +  
+  scale_y_continuous(breaks = seq(0, 100, by = 10)) +
+  scale_fill_manual(values = color_palette)
+
+interactive_plot <- ggplotly(p, tooltip = c("region", "country_count"))  
+interactive_plot
+```
+
+### A Two-Decade Analysis: Progress and Challenges in Global Water Access
+
+The succinct yet illuminating bar graph below underscores a pressing global concern. While it is encouraging to witness numerous countries transitioning to clean and improved water sources over the span of 2000 to 2022, it remains disheartening to observe that even in 2022, **34 countries** persist in the **10%+** category. This stark reality reflects the ongoing plight where individuals are compelled to rely on unimproved drinking water sources, posing significant health risks.
+
+*Hover for more details*
+
+```{r}
+#| label: bar graph
+#| include: true
+#| result: 'asis'
+#| echo: true
+category_labels <- c("0-5%", "5-10%", "10-15%", "15%+")
+category_breaks <- c(0, 5, 10, 15, Inf)
+data_2000 <- unicef_indicator_1 %>%
+  filter(time_period == 2000) %>%
+  mutate(category = cut(obs_value, breaks = category_breaks, labels = category_labels, include.lowest = TRUE))
+data_2022 <- unicef_indicator_1 %>%
+  filter(time_period == 2022) %>%
+  mutate(category = cut(obs_value, breaks = category_breaks, labels = category_labels, include.lowest = TRUE))
+count_2000 <- data_2000 %>%
+  group_by(category) %>%
+  summarize(count = n())
+count_2022 <- data_2022 %>%
+  group_by(category) %>%
+  summarize(count = n())
+count_combined <- rbind(
+  data.frame(Year = rep("2000", nrow(count_2000)), count_2000),
+  data.frame(Year = rep("2022", nrow(count_2022)), count_2022)
+)
+p <- ggplot(count_combined, aes(x = category, y = count, fill = Year, text = paste("Year:", Year, "<br>Count of Countries:", count))) +
+  geom_bar(stat = "identity", position = "dodge", color = "black") +
+  labs(title = "Comparison of Country Counts by Observed Value Category",
+       x = "Observed Value Category",
+       y = "Count of Countries",
+       fill = "Year") +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = "gray85", color = NA),
+        plot.background = element_rect(fill = "gray85", color = NA),
+        legend.position = "top") +
+  scale_fill_manual(values = c("2000" = "red3", "2022" = "skyblue")) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplotly(p, tooltip = "text") %>%
+  style(hoverinfo = "text") %>%
+  config(displayModeBar = FALSE)
+```
+
+### Unimproved Water Access - Regression Analysis
+
+The analysis unveils a ***consistent decline*** in unimproved water access over the years. This indicates a ***favorable global trend*** towards countries attaining access to clean water sources. The rate of decline is estimated to be approximately *0.25%* per year.
+```{r}
+#| label: scatter plot for obs_val
+#| include: true
+#| result: 'asis'
+#| echo: true
+plot_data <- unicef_indicator_1 %>% 
+  filter(time_period >= 2000 & time_period <= 2022) %>%  
+  group_by(time_period) %>% 
+  summarize(obs_value_mean = mean(obs_value, na.rm = TRUE)) 
+plot_data$label_text <- as.character(round(plot_data$obs_value_mean, 2)) 
+predicted_values <- predict(lm(obs_value_mean ~ time_period, data = plot_data))
+p <- ggplot(plot_data, aes(x = time_period, y = obs_value_mean)) +
+  geom_smooth(method = 'lm', color = "#FF9900", span = 3.0) +  #
+  geom_point(color = "#005580", size = 3.5) +        
+  geom_area(aes(ymin = Inf, ymax = predicted_values), 
+       fill = "gray85", alpha = 0.2) +
+  geom_text(aes(label = label_text), size = 3, vjust = +2.0) + 
+  theme_bw() +
+  theme(plot.background = element_rect(fill = "gray85", color = NA),
+        panel.background = element_rect(fill = "gray85", color = NA)) +
+  labs(title = "World Unimproved Water Sources Over the Years (2000-2022)",
+     subtitle = "Unimproved Water Sources Scatter Plot With Regression Line",
+     caption = "Source: Unicef", x = "Year", y = "Unimproved Water Sources") +
+scale_y_continuous(breaks = seq(0, ceiling(max(plot_data$obs_value_mean)), by = 1)) 
+
+print(p)
+```
+### Global Wealth Divide: Exploring GDP Per Capita Disparities
+
+The time series analysis of countries' ***GDP per capita*** offers insights into **economic development** and **disparities** over the years. While countries like ***Monaco***, ***Liechtenstein***, and ***Bermuda*** boast high GDP per capita, others such as ***Burundi***, ***Somalia***, and ***Zimbabwe*** suffer from lower GDP per capita.
+
+*Hover over the graph for more detailed insights for each country*. The color green serves as an indicator for wealth, with light green representing lower GDP per capita and darker green indicating higher GDP per capita.
+
+```{r}
+#| label: gdp per capita
+#| include: true
+#| result: 'asis'
+#| echo: true
+gdp_data <- unicef_metadata %>%
+  filter(year >= 2000 & year <= 2022) %>%
+  select(year, gdp_per_capita = `GDP per capita (constant 2015 US$)`, country) 
+p <- ggplot(gdp_data, aes(x = year, y = gdp_per_capita, text = paste("Country:", country, "<br>GDP Per Capita:", gdp_per_capita))) +
+  geom_point(aes(color = gdp_per_capita), size = 2.5) +  
+  labs(title = "GDP Per Capita Over the Years (2000-2022)",
+       subtitle = "GDP Per Capita Time Series",
+       caption = "Source: Unicef Metadata",
+       x = "Year", y = "GDP Per Capita (constant 2015 US$)",
+       color = "GDP Per Capita") +  # Adjust legend title
+  scale_x_continuous(breaks = seq(2000, 2022, by = 5)) +
+  scale_color_gradient(low = "lightgreen", high = "darkgreen") +
+  theme_bw() + 
+  theme(plot.background = element_rect(fill = "grey85", color = NA),
+        panel.background = element_rect(fill = "grey85", color = NA),
+        legend.background = element_rect(fill = "grey85", color = NA))
+
+ggplotly(p, tooltip = "text")
+```
+
+
+### Population Growth
+
+The population graph depicts a **steep surge** in population over the *past two decades*.
+```{r}
+#| label: population
+#| include: true
+#| result: 'asis'
+#| echo: true
+metadata_filtered <- unicef_metadata %>%
+  filter(year >= 2000 & year <= 2022) 
+metadata_population <- metadata_filtered %>% 
+  group_by(year) %>% 
+  summarise(s_pop = sum(`Population, total`))
+ggplot(metadata_population, aes(year, s_pop)) +
+  geom_line(color = "#00876c", size = 1.5) +
+  scale_y_continuous(labels = function(x) format(x / 1e9, nsmall = 1, digits = 1) %>% paste0("B")) +
+  labs(title = "World Population (2000-2022)",
+       subtitle = "Growth Trend",
+       x = "Year", y = "Population") +
+  theme_bw() + 
+  theme(plot.background = element_rect(fill = "gray85", color = NA), 
+        panel.background = element_rect(fill = "gray85", color = NA))
+```
+### The Wealth-Water Divide: GDP vs. Clean Water Access
+
+The scatter plot unveils a stark correlation between a **country's wealth** and **its citizens' access to clean water** from 2000 to 2022. **Higher GDP per capita** is associated with a **lower percentage** of the population relying on **unimproved water sources**. This downward trend underscores the water access challenges confronting countries with **lower GDP per capita**. *Sub-Saharan Africa*, a region characterized by **lower average GDP per capita**, epitomizes this crisis, with a **significant portion** of the population compelled to rely on **unsafe water sources**, imperiling their ***health and well-being***.
+
+*Hover over the graph for more detailed insights for each region*
+```{r}
+#| label: scatter plot
+#| include: true
+#| result: 'asis'
+#| echo: true
+joined_data <- unicef_metadata %>%
+  inner_join(unicef_indicator_1, by = "country") %>%
+  filter(year >= 2000 & year <= 2022) %>%
+  group_by(country, region, year) %>%
+  summarize(avg_gdp_per_capita = mean(`GDP per capita (constant 2015 US$)`, na.rm = TRUE),
+            avg_obs_value = mean(obs_value, na.rm = TRUE), 
+            .groups = "drop")
+joined_data$region <- as.factor(joined_data$region)
+n_regions <- length(unique(joined_data$region)) 
+color_palette <- brewer.pal(n = n_regions, name = "RdBu")
+color_palette <- rev(color_palette)  
+p <- ggplot(joined_data, aes(x = avg_obs_value, y = avg_gdp_per_capita, color = region, fill = region, text = paste("Year:", year, "<br>Region:", region, "<br>Unimproved Water Access (%):", avg_obs_value))) +
+  geom_point(shape = 21, size = 3, color = "black", stroke = 0.2) +
+  labs(title = "GDP per Capita vs. Unimproved Water Access by Region",
+       x = "Unimproved Water Access (%)",
+       y = "GDP per Capita (constant 2015 US$)",
+       color = "Region",
+       fill = "Region") + 
+  scale_fill_manual(values = color_palette) +
+  theme_bw() +
+  theme(plot.background = element_rect(fill = "gray85", color = NA),
+        panel.background = element_rect(fill = "gray85", color = NA),
+        legend.background = element_rect(fill = "gray85"),
+        legend.position = "bottom",
+        legend.box = "horizontal") +
+  scale_x_continuous(breaks = seq(-5, 50, by = 5)) +
+  scale_y_continuous(breaks = seq(0, 300000, by = 50000))
+
+ggplotly(p, tooltip = "text")
+```
+
+### Conclusions and Recommendations
+
+
+In conclusion, the **comprehensive analysis** of global water access presented in this report reveals both **progress** and **persistent challenges**. While strides have been made in improving clean water access worldwide, stark disparities remain, particularly evident in regions such as **Sub-Saharan Africa**. From the detailed regional breakdowns to the examination of **long-term trends**, each graph paints a clear picture of the complex landscape of water access and underscores the **urgent need for action**.
+
+To address these challenges and close the gap between countries for clean water access, concerted efforts are needed to **invest in infrastructure**, **implement sustainable water management practices**, and **prioritize equitable distribution of resources**, particularly in regions with the greatest need. **Collaboration** between governments, international organizations, and local communities is crucial for achieving **universal access to clean water** and ensuring the **health and well-being** of all populations. By heeding these recommendations and working together towards a common goal, we can make significant strides towards a future where clean water is a fundamental human right for all.
